@@ -1,0 +1,30 @@
+# Python
+venv/
+.venv/
+venv310/
+__pycache__/
+
+# AI models
+*.keras
+*.h5
+*.pb
+saved_model/
+skin_model_savedmodel/
+best_skin_disease_model_folder/
+AI/
+
+# .NET
+bin/
+obj/
+.vs/
+
+# Uploads
+wwwroot/uploads/
+wwwroot/files/
+wwwroot/voice/
+
+# VS temp
+*.user
+*.tmp
+*.Backup
+publish/
