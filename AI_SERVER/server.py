@@ -14,6 +14,22 @@ os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 API_VERSION = "mobile-1.2.0"
 BUILD_TIME_UTC = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+def swish(x):
+    return tf.nn.swish(x)
+
+MODEL_URL = os.environ.get("MODEL_URL")
+MODEL_PATH = "model.keras"
+
+if not os.path.exists(MODEL_PATH):
+    print("⬇️ Downloading AI model...")
+    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+
+print("✅ Loading model...")
+model = tf.keras.models.load_model(
+    MODEL_PATH,
+    custom_objects={"swish": swish}
+)
+print("🚀 Model loaded successfully")
 
 # ---------- Paths ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
