@@ -2,11 +2,13 @@
 import os
 import io
 import time
+import gdown
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+
 
 # Optional: reduce TF logs
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -33,7 +35,6 @@ print("🚀 Model loaded successfully")
 
 # ---------- Paths ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH  = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "best_skin_disease_model.keras"))
 LABELS_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "labels.txt"))
 
 IMG_SIZE = (380, 380)
