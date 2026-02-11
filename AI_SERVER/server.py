@@ -29,7 +29,7 @@ def swish(x):
     return tf.nn.swish(x)
 
 MODEL_URL = os.environ.get("MODEL_URL")
-MODEL_PATH = "model.keras"
+MODEL_PATH = "best_skin_disease_model.keras"
 if not MODEL_URL:
     raise RuntimeError("MODEL_URL environment variable is not set")
 if not os.path.exists(MODEL_PATH):
