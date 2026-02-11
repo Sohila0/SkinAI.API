@@ -27,6 +27,8 @@ API_VERSION = "mobile-1.2.0"
 BUILD_TIME_UTC = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 def swish(x):
     return tf.nn.swish(x)
+ 
+print("✅ DEPLOY MARK:", "73ae008b", "MODEL_PATH=", MODEL_PATH)
 
 MODEL_URL = os.environ.get("MODEL_URL")
 MODEL_PATH = "best_skin_disease_model.keras"
