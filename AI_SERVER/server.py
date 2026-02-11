@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 import os
 import urllib.request
-
+import time
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
