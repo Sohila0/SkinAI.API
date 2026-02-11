@@ -33,8 +33,11 @@ MODEL_PATH = "model.keras"
 if not MODEL_URL:
     raise RuntimeError("MODEL_URL environment variable is not set")
 if not os.path.exists(MODEL_PATH):
-    print("⬇️ Downloading AI model...")
-    gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+    gdown.download(
+        url=MODEL_URL,
+        output=MODEL_PATH,
+        quiet=False
+    )
 
 print("✅ Loading model...")
 model = tf.keras.models.load_model(
