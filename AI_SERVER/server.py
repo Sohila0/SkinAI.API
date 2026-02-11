@@ -1,23 +1,17 @@
 # -*- coding: utf-8 -*-
-# -*- coding: utf-8 -*-
 import os
 import io
-import urllib.request
 import time
-import gdown
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+
 print("🔥 USING UPDATED SERVER.PY 🔥")
 
-
-app = FastAPI()
-
-def swish(x):
-    return tf.nn.swish(x)
-
+# ------------------ FastAPI App ------------------
+app = FastAPI(title="SkinAI FastAPI (Mobile)")
 
 # Optional: reduce TF logs
 os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
@@ -25,35 +19,39 @@ os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 API_VERSION = "mobile-1.2.0"
 BUILD_TIME_UTC = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+# ------------------ Custom Layers ------------------
 def swish(x):
     return tf.nn.swish(x)
- 
-print("✅ DEPLOY MARK:", "73ae008b", "MODEL_PATH=", MODEL_PATH)
 
-MODEL_URL = os.environ.get("MODEL_URL")
-MODEL_PATH = "best_skin_disease_model.keras"
-if not MODEL_URL:
-    raise RuntimeError("MODEL_URL environment variable is not set")
-if not os.path.exists(MODEL_PATH):
-    gdown.download(
-        url=MODEL_URL,
-        output=MODEL_PATH,
-        quiet=False
-    )
-
-print("✅ Loading model...")
-model = tf.keras.models.load_model(
-    MODEL_PATH,
-    custom_objects={"swish": swish}
-)
-print("🚀 Model loaded successfully")
-print("🔥 DOWNLOAD BLOCK EXECUTED 🔥")
-
-
-# ---------- Paths ----------
+# ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+MODEL_PATH  = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "best_skin_disease_model.keras"))
 LABELS_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "labels.txt"))
 
+print("✅ DEPLOY MARK: 73ae008b")
+print("✅ FILE:", __file__)
+print("✅ LABELS_PATH =", LABELS_PATH)
+
+# ------------------ (Optional) Download model from URL ------------------
+# لو هتنزلي الموديل من بره (HuggingFace) حطي MODEL_URL في Environment Variable
+MODEL_URL = os.environ.get("MODEL_URL")
+
+if not os.path.exists(MODEL_PATH):
+    if not MODEL_URL:
+        raise RuntimeError(
+            f"Model file not found at: {MODEL_PATH}\n"
+            f"Either place the model there OR set MODEL_URL environment variable."
+        )
+    # لو حابة تنزليه من URL
+    import urllib.request
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    print("⬇️ Downloading model from MODEL_URL ...")
+    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+    print("✅ Model downloaded")
+
+# ------------------ Load Labels ------------------
 IMG_SIZE = (380, 380)
 
 DEFAULT_LABELS = [
@@ -65,24 +63,6 @@ DEFAULT_LABELS = [
     "Vitiligo"
 ]
 
-# ---------- Thresholds ----------
-CONF_THRESHOLD = 0.70
-GAP_THRESHOLD = 0.12
-NORMAL_ACCEPT_THRESHOLD = 0.65
-
-# ---------- Mobile Image Quality Policy ----------
-MIN_W = 256
-MIN_H = 256
-WARN_W = 600
-WARN_H = 600
-
-# ---------- Upload limits (important for mobile) ----------
-# Max accepted bytes (e.g., 8MB)
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024
-
-def swish(x):
-    return tf.nn.swish(x)
-
 def load_labels():
     if os.path.exists(LABELS_PATH):
         with open(LABELS_PATH, "r", encoding="utf-8") as f:
@@ -93,11 +73,24 @@ def load_labels():
 
 LABELS = load_labels()
 
-# Load model once
+# ------------------ Load Model ONCE ------------------
+print("✅ Loading model...")
 model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"swish": swish})
+print("🚀 Model loaded successfully")
 
-# FastAPI
-app = FastAPI(title="SkinAI FastAPI (Mobile)")
+# ------------------ Thresholds ------------------
+CONF_THRESHOLD = 0.70
+GAP_THRESHOLD = 0.12
+NORMAL_ACCEPT_THRESHOLD = 0.65
+
+# ------------------ Mobile Image Quality Policy ------------------
+MIN_W = 256
+MIN_H = 256
+WARN_W = 600
+WARN_H = 600
+
+# Max accepted bytes (e.g., 8MB)
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024
 
 def safe_label(i: int) -> str:
     return LABELS[i] if 0 <= i < len(LABELS) else f"L{i}"
@@ -141,7 +134,6 @@ def quality_tier(w: int, h: int) -> str:
         return "low"
     return "good"
 
-# -------- Messages (EN only since you said app English) --------
 def msg(code: str, en: str, **extra):
     payload = {"code": code, "en": en}
     if extra:
@@ -172,9 +164,6 @@ def message_for(status: str, tier: str):
     )
 
 def preprocess(image_bytes: bytes):
-    """
-    Returns: x, (w,h), tier
-    """
     img = Image.open(io.BytesIO(image_bytes))
     img = ImageOps.exif_transpose(img).convert("RGB")
 
@@ -192,10 +181,6 @@ def preprocess(image_bytes: bytes):
     return x, (w, h), tier
 
 def decide(probs: np.ndarray, tier: str):
-    """
-    Always outputs TOP-1 diagnosis + confidence
-    status: ok | uncertain | low_quality
-    """
     probs = np.array(probs).reshape(-1)
     best = int(np.argmax(probs))
     best_label = safe_label(best)
@@ -203,12 +188,10 @@ def decide(probs: np.ndarray, tier: str):
     gap = compute_gap(probs)
     t3 = topk(probs, 3)
 
-    # Accept confident normal
     if best_label == "Unknown_Normal" and conf >= NORMAL_ACCEPT_THRESHOLD:
         status = "ok" if tier == "good" else "low_quality"
         return status, best, best_label, conf, gap, t3, None
 
-    # Uncertain if low confidence or close scores
     if conf < CONF_THRESHOLD or gap < GAP_THRESHOLD:
         status = "uncertain" if tier == "good" else "low_quality"
         uncertain_reason = {
@@ -225,7 +208,6 @@ def decide(probs: np.ndarray, tier: str):
     status = "ok" if tier == "good" else "low_quality"
     return status, best, best_label, conf, gap, t3, None
 
-# ✅ Warmup on startup to prevent first-call timeout
 @app.on_event("startup")
 def warmup():
     try:
@@ -244,17 +226,6 @@ def ping():
         "labels": LABELS,
         "input_shape": str(model.input_shape),
         "output_shape": str(model.output_shape),
-        "preprocess": "EXIF transpose + resize_then_center_crop + efficientnet.preprocess_input",
-        "thresholds": {
-            "conf_threshold": CONF_THRESHOLD,
-            "gap_threshold": GAP_THRESHOLD,
-            "normal_accept_threshold": NORMAL_ACCEPT_THRESHOLD
-        },
-        "image_quality_policy": {
-            "min": [MIN_W, MIN_H],
-            "warn": [WARN_W, WARN_H],
-            "tiers": ["good", "low", "bad"]
-        },
         "max_upload_bytes": MAX_UPLOAD_BYTES
     }
 
@@ -262,18 +233,13 @@ def ping():
 async def predict(file: UploadFile = File(...)):
     try:
         image_bytes = await file.read()
-
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty file")
 
         if len(image_bytes) > MAX_UPLOAD_BYTES:
             return JSONResponse(
                 status_code=413,
-                content={
-                    "ok": False,
-                    "error": "File too large",
-                    "max_upload_bytes": MAX_UPLOAD_BYTES
-                }
+                content={"ok": False, "error": "File too large", "max_upload_bytes": MAX_UPLOAD_BYTES}
             )
 
         x, (w, h), tier = preprocess(image_bytes)
@@ -283,7 +249,6 @@ async def predict(file: UploadFile = File(...)):
 
         probs = ensure_softmax(raw)
         status, best, diagnosis, conf, gap, t3, uncertain_reason = decide(probs, tier)
-
         message = message_for("bad_image" if status == "bad_image" else status, tier if status != "low_quality" else "low")
 
         return {
@@ -326,7 +291,6 @@ async def predict(file: UploadFile = File(...)):
 async def predict_debug(file: UploadFile = File(...)):
     try:
         image_bytes = await file.read()
-
         if not image_bytes:
             raise HTTPException(status_code=400, detail="Empty file")
 
@@ -342,7 +306,6 @@ async def predict_debug(file: UploadFile = File(...)):
 
         probs = ensure_softmax(raw)
         status, best, diagnosis, conf, gap, t3, uncertain_reason = decide(probs, tier)
-
         message = message_for("bad_image" if status == "bad_image" else status, tier if status != "low_quality" else "low")
 
         return {
