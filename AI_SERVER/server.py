@@ -8,6 +8,8 @@ import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+print("🔥 USING UPDATED SERVER.PY 🔥")
+
 
 app = FastAPI()
 
@@ -38,6 +40,8 @@ model = tf.keras.models.load_model(
     custom_objects={"swish": swish}
 )
 print("🚀 Model loaded successfully")
+print("🔥 DOWNLOAD BLOCK EXECUTED 🔥")
+
 
 # ---------- Paths ----------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
