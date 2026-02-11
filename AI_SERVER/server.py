@@ -1,13 +1,18 @@
 # -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import os
-import io
-import time
-import gdown
+import urllib.request
+
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
+
+app = FastAPI()
+
+def swish(x):
+    return tf.nn.swish(x)
 
 
 # Optional: reduce TF logs
@@ -21,7 +26,8 @@ def swish(x):
 
 MODEL_URL = os.environ.get("MODEL_URL")
 MODEL_PATH = "model.keras"
-
+if not MODEL_URL:
+    raise RuntimeError("MODEL_URL environment variable is not set")
 if not os.path.exists(MODEL_PATH):
     print("⬇️ Downloading AI model...")
     gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
