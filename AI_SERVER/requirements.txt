@@ -1,7 +1,8 @@
 fastapi
-uvicorn[standard]
-tensorflow-cpu==2.15.0
+uvicorn
+numpy<2
 pillow
-numpy
+tensorflow==2.16.1
+keras==3.0.5
+h5py
 python-multipart
-

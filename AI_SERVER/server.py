@@ -29,7 +29,7 @@ def swish(x):
 
 # ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "best_skin_disease_model.keras")
+MODEL_PATH  = os.path.join(BASE_DIR, "best_skin_disease_model.h5")
 LABELS_PATH = os.path.join(BASE_DIR, "labels.txt")
 MODEL_URL = os.environ.get("MODEL_URL")
 
