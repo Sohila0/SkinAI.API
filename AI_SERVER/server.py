@@ -27,8 +27,8 @@ def swish(x):
 # ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-MODEL_PATH  = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "best_skin_disease_model.keras"))
-LABELS_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "AI", "labels.txt"))
+MODEL_PATH  = os.path.join(BASE_DIR, "best_skin_disease_model.keras")
+LABELS_PATH = os.path.join(BASE_DIR, "labels.txt")
 
 print("✅ DEPLOY MARK: 73ae008b")
 print("✅ FILE:", __file__)
@@ -59,7 +59,7 @@ DEFAULT_LABELS = [
     "Psoriasis",
     "Skin Cancer",
     "Tinea",
-    "Unknown_Normal",
+    "Normal",
     "Vitiligo"
 ]
 
