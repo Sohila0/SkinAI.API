@@ -196,40 +196,62 @@ def decide(probs: np.ndarray, tier: str):
     return status, best, best_label, conf, gap, t3, None
 
 # ------------------ Model loader (runs in background) ------------------
+
 def _download_model_if_needed():
-    if os.path.exists(MODEL_PATH):
+    if os.path.exists(MODEL_PATH) and os.path.getsize(MODEL_PATH) > 10_000_000:
+        print("✅ Model already exists, skipping download")
         return
+
     if not MODEL_URL:
         raise RuntimeError(
-            f"Model file not found at: {MODEL_PATH}\n"
-            f"Either place the model there OR set MODEL_URL environment variable."
+            f"Model file not found at: {MODEL_PATH} and MODEL_URL not set."
         )
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+
     print("⬇️ Downloading model from MODEL_URL ...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    print("✅ Model downloaded:", MODEL_PATH)
+
+    tmp_path = MODEL_PATH + ".tmp"
+    urllib.request.urlretrieve(MODEL_URL, tmp_path)
+
+    # sanity check (prevent HTML download instead of model)
+    if os.path.getsize(tmp_path) < 10_000_000:
+        raise RuntimeError("Downloaded model looks corrupted or too small.")
+
+    os.replace(tmp_path, MODEL_PATH)
+    print("✅ Model downloaded successfully:", MODEL_PATH)
+
 
 def _load_model_background():
     global model, model_err, model_ready_at_utc
 
     try:
         print("✅ Background: preparing model...")
-        
+
+        _download_model_if_needed()
 
         print("✅ Loading model...")
 
-        model = tf.keras.models.load_model(
+        m = tf.keras.models.load_model(
             MODEL_PATH,
             compile=False,
             safe_mode=False
         )
 
-        print("🚀 Model loaded successfully")
+        # Warmup
+        dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
+        _ = m.predict(dummy, verbose=0)
+
+        model = m
+        model_err = None
         model_ready_at_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
+        print("🚀 Model loaded successfully")
+
     except Exception as e:
-        print("❌ Model loading failed:", e)
+        model = None
         model_err = str(e)
+        model_ready_at_utc = None
+        print("❌ Model loading failed:", model_err)
+
 
 
 
