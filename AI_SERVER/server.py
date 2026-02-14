@@ -2,13 +2,16 @@
 import os
 import io
 import time
+import threading
+import urllib.request
+
 import numpy as np
 import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 
-print("🔥 USING UPDATED SERVER.PY 🔥")
+print("🔥 USING UPDATED SERVER.PY (RENDER SAFE) 🔥")
 
 # ------------------ FastAPI App ------------------
 app = FastAPI(title="SkinAI FastAPI (Mobile)")
@@ -26,32 +29,15 @@ def swish(x):
 
 # ------------------ Paths ------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-MODEL_PATH  = os.path.join(BASE_DIR, "best_skin_disease_model.keras")
+MODEL_PATH = os.path.join(BASE_DIR, "best_skin_disease_model.keras")
 LABELS_PATH = os.path.join(BASE_DIR, "labels.txt")
-
-print("✅ DEPLOY MARK: 73ae008b")
-print("✅ FILE:", __file__)
-print("✅ LABELS_PATH =", LABELS_PATH)
-
-# ------------------ (Optional) Download model from URL ------------------
-# لو هتنزلي الموديل من بره (HuggingFace) حطي MODEL_URL في Environment Variable
 MODEL_URL = os.environ.get("MODEL_URL")
 
-if not os.path.exists(MODEL_PATH):
-    if not MODEL_URL:
-        raise RuntimeError(
-            f"Model file not found at: {MODEL_PATH}\n"
-            f"Either place the model there OR set MODEL_URL environment variable."
-        )
-    # لو حابة تنزليه من URL
-    import urllib.request
-    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
-    print("⬇️ Downloading model from MODEL_URL ...")
-    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
-    print("✅ Model downloaded")
+print("✅ FILE:", __file__)
+print("✅ LABELS_PATH =", LABELS_PATH)
+print("✅ MODEL_PATH =", MODEL_PATH)
 
-# ------------------ Load Labels ------------------
+# ------------------ Labels ------------------
 IMG_SIZE = (380, 380)
 
 DEFAULT_LABELS = [
@@ -64,19 +50,22 @@ DEFAULT_LABELS = [
 ]
 
 def load_labels():
-    if os.path.exists(LABELS_PATH):
-        with open(LABELS_PATH, "r", encoding="utf-8") as f:
-            labels = [line.strip() for line in f if line.strip()]
-        if len(labels) == 6:
-            return labels
+    try:
+        if os.path.exists(LABELS_PATH):
+            with open(LABELS_PATH, "r", encoding="utf-8") as f:
+                labels = [line.strip() for line in f if line.strip()]
+            if len(labels) == 6:
+                return labels
+    except Exception as e:
+        print("⚠️ Failed reading labels.txt:", e)
     return DEFAULT_LABELS
 
 LABELS = load_labels()
 
-# ------------------ Load Model ONCE ------------------
-print("✅ Loading model...")
-model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"swish": swish})
-print("🚀 Model loaded successfully")
+# ------------------ Model holder (IMPORTANT) ------------------
+model = None
+model_err = None
+model_ready_at_utc = None
 
 # ------------------ Thresholds ------------------
 CONF_THRESHOLD = 0.70
@@ -88,9 +77,7 @@ MIN_W = 256
 MIN_H = 256
 WARN_W = 600
 WARN_H = 600
-
-# Max accepted bytes (e.g., 8MB)
-MAX_UPLOAD_BYTES = 8 * 1024 * 1024
+MAX_UPLOAD_BYTES = 8 * 1024 * 1024  # 8MB
 
 def safe_label(i: int) -> str:
     return LABELS[i] if 0 <= i < len(LABELS) else f"L{i}"
@@ -169,7 +156,6 @@ def preprocess(image_bytes: bytes):
 
     w, h = img.size
     tier = quality_tier(w, h)
-
     if tier == "bad":
         raise ValueError(f"bad_image: image too small ({w}x{h})")
 
@@ -188,6 +174,7 @@ def decide(probs: np.ndarray, tier: str):
     gap = compute_gap(probs)
     t3 = topk(probs, 3)
 
+    # (keep your original logic)
     if best_label == "Unknown_Normal" and conf >= NORMAL_ACCEPT_THRESHOLD:
         status = "ok" if tier == "good" else "low_quality"
         return status, best, best_label, conf, gap, t3, None
@@ -208,15 +195,57 @@ def decide(probs: np.ndarray, tier: str):
     status = "ok" if tier == "good" else "low_quality"
     return status, best, best_label, conf, gap, t3, None
 
-@app.on_event("startup")
-def warmup():
+# ------------------ Model loader (runs in background) ------------------
+def _download_model_if_needed():
+    if os.path.exists(MODEL_PATH):
+        return
+    if not MODEL_URL:
+        raise RuntimeError(
+            f"Model file not found at: {MODEL_PATH}\n"
+            f"Either place the model there OR set MODEL_URL environment variable."
+        )
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
+    print("⬇️ Downloading model from MODEL_URL ...")
+    urllib.request.urlretrieve(MODEL_URL, MODEL_PATH)
+    print("✅ Model downloaded:", MODEL_PATH)
+
+def _load_model_background():
+    global model, model_err, model_ready_at_utc
     try:
+        print("✅ Background: preparing model...")
+        _download_model_if_needed()
+
+        print("✅ Background: loading model...")
+        model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"swish": swish})
+        print("🚀 Model loaded successfully")
+
+        # warmup
         dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
         _ = model.predict(dummy, verbose=0)
         print("✅ Model warmup done")
-    except Exception as e:
-        print("⚠️ Warmup failed:", e)
 
+        model_ready_at_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        model_err = None
+    except Exception as e:
+        model = None
+        model_err = str(e)
+        print("❌ Model load failed:", model_err)
+
+@app.on_event("startup")
+def startup():
+    # IMPORTANT: start loading in background so uvicorn opens the port quickly
+    t = threading.Thread(target=_load_model_background, daemon=True)
+    t.start()
+    print("✅ Startup: model loading thread started")
+
+def require_model():
+    if model is None:
+        # If failed, show why
+        if model_err:
+            raise HTTPException(status_code=500, detail=f"Model failed to load: {model_err}")
+        raise HTTPException(status_code=503, detail="Model is still loading. Try again in a few seconds.")
+
+# ------------------ Endpoints ------------------
 @app.get("/ping")
 def ping():
     return {
@@ -224,13 +253,16 @@ def ping():
         "api_version": API_VERSION,
         "build_time_utc": BUILD_TIME_UTC,
         "labels": LABELS,
-        "input_shape": str(model.input_shape),
-        "output_shape": str(model.output_shape),
+        "model_loaded": model is not None,
+        "model_ready_at_utc": model_ready_at_utc,
+        "model_error": model_err,
         "max_upload_bytes": MAX_UPLOAD_BYTES
     }
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
+    require_model()
+
     try:
         image_bytes = await file.read()
         if not image_bytes:
@@ -284,11 +316,15 @@ async def predict(file: UploadFile = File(...)):
             )
         return JSONResponse(status_code=400, content={"ok": False, "error": msg_txt})
 
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
 
 @app.post("/predict_debug")
 async def predict_debug(file: UploadFile = File(...)):
+    require_model()
+
     try:
         image_bytes = await file.read()
         if not image_bytes:
@@ -320,5 +356,7 @@ async def predict_debug(file: UploadFile = File(...)):
             "meta": {"api_version": API_VERSION, "img_size": list(IMG_SIZE)}
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
