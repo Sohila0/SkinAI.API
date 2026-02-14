@@ -211,17 +211,27 @@ def _download_model_if_needed():
 
 def _load_model_background():
     global model, model_err, model_ready_at_utc
+
     try:
         print("✅ Background: preparing model...")
         _download_model_if_needed()
 
-        print("✅ Background: loading model...")
-    model = tf.keras.models.load_model(
-    MODEL_PATH,
-    compile=False,
-    safe_mode=False
-)
+        print("✅ Loading model...")
+
+        model = tf.keras.models.load_model(
+            MODEL_PATH,
+            compile=False,
+            safe_mode=False
+        )
+
         print("🚀 Model loaded successfully")
+        model_ready_at_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    except Exception as e:
+        print("❌ Model loading failed:", e)
+        model_err = str(e)
+
+
 
         # warmup
         dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
