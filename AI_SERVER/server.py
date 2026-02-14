@@ -236,9 +236,7 @@ def _load_model_background():
             safe_mode=False
         )
 
-        # Warmup
-        dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
-        _ = m.predict(dummy, verbose=0)
+     
 
         model = m
         model_err = None
