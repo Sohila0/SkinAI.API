@@ -10,7 +10,8 @@ import tensorflow as tf
 from PIL import Image, ImageOps
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
-
+tf.config.threading.set_intra_op_parallelism_threads(1)
+tf.config.threading.set_inter_op_parallelism_threads(1)
 print("🔥 USING UPDATED SERVER.PY (RENDER SAFE) 🔥")
 
 # ------------------ FastAPI App ------------------
@@ -198,56 +199,50 @@ def decide(probs: np.ndarray, tier: str):
 # ------------------ Model loader (runs in background) ------------------
 
 def _download_model_if_needed():
-    if os.path.exists(MODEL_PATH) and os.path.getsize(MODEL_PATH) > 10_000_000:
-        print("✅ Model already exists, skipping download")
+    if os.path.exists(MODEL_PATH) and os.path.getsize(MODEL_PATH) > 1024 * 1024:
+        # موجود وحجمه معقول (أكبر من 1MB)
         return
 
     if not MODEL_URL:
         raise RuntimeError(
-            f"Model file not found at: {MODEL_PATH} and MODEL_URL not set."
+            f"Model file not found at: {MODEL_PATH}\n"
+            f"Set MODEL_URL environment variable to a direct .keras download link."
         )
 
-    print("⬇️ Downloading model from MODEL_URL ...")
+    os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
 
     tmp_path = MODEL_PATH + ".tmp"
+    print("⬇️ Downloading model from MODEL_URL ...")
     urllib.request.urlretrieve(MODEL_URL, tmp_path)
-
-    # sanity check (prevent HTML download instead of model)
-    if os.path.getsize(tmp_path) < 10_000_000:
-        raise RuntimeError("Downloaded model looks corrupted or too small.")
-
     os.replace(tmp_path, MODEL_PATH)
-    print("✅ Model downloaded successfully:", MODEL_PATH)
+    print("✅ Model downloaded successfully:", MODEL_PATH, "size=", os.path.getsize(MODEL_PATH))
+
 
 
 def _load_model_background():
     global model, model_err, model_ready_at_utc
-
     try:
         print("✅ Background: preparing model...")
-
         _download_model_if_needed()
 
         print("✅ Loading model...")
 
-        m = tf.keras.models.load_model(
+        # مهم: استخدمي keras (مش tf.keras) مع .keras
+        import keras
+        model = keras.saving.load_model(
             MODEL_PATH,
             compile=False,
             safe_mode=False
         )
 
-     
-
-        model = m
-        model_err = None
         model_ready_at_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-
+        model_err = None
         print("🚀 Model loaded successfully")
 
     except Exception as e:
         model = None
-        model_err = str(e)
         model_ready_at_utc = None
+        model_err = str(e)
         print("❌ Model loading failed:", model_err)
 
 
