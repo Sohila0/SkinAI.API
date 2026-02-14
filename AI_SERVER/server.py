@@ -214,7 +214,7 @@ def _load_model_background():
 
     try:
         print("✅ Background: preparing model...")
-        _download_model_if_needed()
+        
 
         print("✅ Loading model...")
 
