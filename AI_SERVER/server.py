@@ -253,13 +253,6 @@ def _load_model_background():
         print("❌ Model loading failed:", model_err)
 
 
-
-
-        # warmup
-        dummy = np.zeros((1, IMG_SIZE[0], IMG_SIZE[1], 3), dtype=np.float32)
-        _ = model.predict(dummy, verbose=0)
-        print("✅ Model warmup done")
-
         model_ready_at_utc = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         model_err = None
     except Exception as e:
