@@ -1,0 +1,6 @@
+Eczema
+Psoriasis
+Skin Cancer
+Tinea
+Normal
+Vitiligo
