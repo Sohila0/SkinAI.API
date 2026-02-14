@@ -9,9 +9,13 @@
 
   <ItemGroup>
     <Compile Remove="AI\**" />
+    <Compile Remove="AI_SERVER\skin_model_savedmodel\**" />
     <Content Remove="AI\**" />
+    <Content Remove="AI_SERVER\skin_model_savedmodel\**" />
     <EmbeddedResource Remove="AI\**" />
+    <EmbeddedResource Remove="AI_SERVER\skin_model_savedmodel\**" />
     <None Remove="AI\**" />
+    <None Remove="AI_SERVER\skin_model_savedmodel\**" />
   </ItemGroup>
 
   <ItemGroup>

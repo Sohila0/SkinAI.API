@@ -3,6 +3,5 @@ uvicorn
 numpy<2
 pillow
 tensorflow==2.16.1
-keras==3.0.5
 h5py
 python-multipart

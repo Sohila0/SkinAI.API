@@ -216,7 +216,12 @@ def _load_model_background():
         _download_model_if_needed()
 
         print("✅ Background: loading model...")
-        model = tf.keras.models.load_model(MODEL_PATH, custom_objects={"swish": swish})
+       model = tf.keras.models.load_model(
+    MODEL_PATH,
+    compile=False,
+    safe_mode=False
+)
+
         print("🚀 Model loaded successfully")
 
         # warmup
